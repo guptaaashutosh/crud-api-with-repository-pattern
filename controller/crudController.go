@@ -3,6 +3,7 @@ package controller
 import (
 	// "context"
 
+	"fmt"
 	"net/http"
 
 	// "learn/httpserver/dal"
@@ -11,25 +12,9 @@ import (
 	"learn/httpserver/repo"
 	"learn/httpserver/setup"
 
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
-
-// func Test(c *gin.Context) {
-// 	data := map[string]interface{}{
-// 		"id":   10,
-// 		"name": "test-name",
-// 		"age":  30,
-// 	}
-// 	c.JSON(http.StatusOK, data)
-
-// 	// c.JSON(http.StatusOK, gin.H{  // gin.H helps to access the element. gin.H is defined as type H map[string]interface{}.
-// 	// 	"message": "pong",
-// 	//   })
-// }
-
-// // func (r *repo.User) Get() model.User{
-// //     return dal.Get(r)
-// // }
 
 func Get(c *gin.Context) {
 	DB := setup.ConnectDB()
@@ -63,7 +48,7 @@ func Create(c *gin.Context) {
 
 }
 
-//Delete
+// Delete
 func Delete(c *gin.Context) {
 	DB := setup.ConnectDB()
 	repos := repo.UserRepo(DB)
@@ -79,7 +64,7 @@ func Delete(c *gin.Context) {
 
 }
 
-//Update
+// Update
 func Update(c *gin.Context) {
 	DB := setup.ConnectDB()
 	repos := repo.UserRepo(DB)
@@ -91,7 +76,7 @@ func Update(c *gin.Context) {
 	if err != nil {
 		panic(err)
 	}
-	isUpdated, updationError := repos.UpdateData(user,id)
+	isUpdated, updationError := repos.UpdateData(user, id)
 	if updationError != nil {
 		panic(updationError)
 	}
@@ -101,3 +86,114 @@ func Update(c *gin.Context) {
 
 }
 
+// Login
+func Login(c *gin.Context) {
+	session := sessions.Default(c)
+	//check if user has already loggedIn 
+	if(session.Get("isAuthenticated") == true ) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"message": "you are already loggedIn",
+		})
+		return
+	}
+
+	DB := setup.ConnectDB()
+	repos := repo.UserRepo(DB)
+
+	var loginUser model.Login
+	err := c.BindJSON(&loginUser)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"Error": err.Error(),
+		})
+		return
+	}
+	// check generate token after checking if it is available
+	loggedInToken, loggedInError := repos.LoggedIn(loginUser)
+	if loggedInError != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"Error": loggedInError.Error(),
+		})
+		return
+	}
+
+	//save authentication in session
+	session.Set("isAuthenticated", true)
+	session.Set("loggedInToken", loggedInToken)
+	session.Save()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":true,
+		"message": "successfully loggedIn",
+	})
+
+}
+
+// Logout
+func Logout(c *gin.Context) {
+	//save authentication in session
+	
+	session := sessions.Default(c)
+
+	if(session.Get("isAuthenticated") == false ){
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "Invalid request to logout - already logout",
+		})
+		return 
+	}
+
+	session.Set("isAuthenticated", false)
+	session.Set("loggedInToken", "")
+	session.Save()
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "successfully logout",
+	})
+}
+
+// AuthData
+func AuthData(c *gin.Context) {
+	DB := setup.ConnectDB()
+	//repositories initialization
+	repos := repo.UserRepo(DB)
+	getData, err := repos.GetData()
+	if err != nil {
+		panic(err)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "successfully authenticated and authorized",
+		"Auth Data": getData,
+	})
+}
+
+// SessionTest
+func SessionTest(c *gin.Context) {
+	DB := setup.ConnectDB()
+	//repositories initialization
+	repos := repo.UserRepo(DB)
+	getData, err := repos.GetData()
+	if err != nil {
+		panic(err)
+	}
+
+	// session management to check how many times the api get hit in current session
+	session := sessions.Default(c)
+	var count int
+	v := session.Get("count")
+	fmt.Println(v)
+	if v == nil {
+		count = 0
+	} else {
+		count = v.(int)
+		count++
+	}
+	session.Set("count", count)
+	session.Save()
+
+	c.JSON(http.StatusOK, gin.H{
+		"session-test-message": "successfully test session",
+		"AllData":              getData,
+	})
+}

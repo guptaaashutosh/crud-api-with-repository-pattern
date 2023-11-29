@@ -7,3 +7,9 @@ type User struct {
 	Age int64
 	Address string
 }
+
+
+type Login struct {
+	Id int64
+	Name string
+}
